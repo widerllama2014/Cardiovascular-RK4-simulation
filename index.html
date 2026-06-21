@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RK2 en un sistema de 2 ecuaciones · presión y flujo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eef1f6; --surface:#ffffff; --ink:#1b2434; --muted:#6a7484;
+  --line:#e1e6ef; --line2:#c9d1de;
+  --real:#2b3a55; --k1:#2563c9; --k2:#cf4434; --avg:#0d9b63;
+  --pres:#c0392b; --flow:#2563c9;
+  --avg-soft:#e3f5ec; --k2-soft:#fbe8e6;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --serif:"Source Serif 4",Georgia,"Times New Roman",serif;
+}
+*{box-sizing:border-box} html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--mono);line-height:1.5;padding:28px 18px 60px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1000px;margin:0 auto}
+header{margin-bottom:20px}
+.eyebrow{font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--avg);margin:0 0 8px;font-weight:600}
+h1{font-family:var(--serif);font-weight:700;font-size:clamp(25px,4vw,38px);line-height:1.08;margin:0 0 10px;letter-spacing:-.01em}
+.sub{font-size:14px;color:var(--muted);max-width:66ch;margin:0 0 16px}
+.sub b{color:var(--ink);font-weight:500}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px}
+
+.eqs{display:flex;flex-wrap:wrap;gap:14px;padding:14px 18px;margin-bottom:16px;align-items:center}
+.eqs .lab{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;width:100%;margin-bottom:-2px}
+.eq{font-size:15px;background:#fbfcfe;border:1px solid var(--line);border-radius:9px;padding:9px 14px;flex:1 1 280px}
+.eq b{font-weight:600}
+.eq.p b{color:var(--pres)} .eq.q b{color:var(--flow)}
+.eq small{color:var(--muted);font-size:12px}
+
+.stage{padding:16px 16px 18px;margin-bottom:16px}
+.stepnav{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px}
+.stepbtn{flex:1 1 0;min-width:150px;text-align:left;border:1.5px solid var(--line2);background:#fff;border-radius:12px;padding:14px 15px;cursor:pointer;transition:all .12s ease;display:flex;gap:12px;align-items:center}
+.stepbtn:hover{border-color:var(--real);background:#f6f8fc}
+.stepbtn[aria-current="true"]{background:var(--real);border-color:var(--real)}
+.stepbtn:focus-visible{outline:2px solid var(--k1);outline-offset:2px}
+.stepbtn .n{font-family:var(--serif);font-weight:700;font-size:30px;color:var(--avg);line-height:1;flex:none}
+.stepbtn .t{font-size:13.5px;color:var(--muted);line-height:1.25;font-weight:500}
+.stepbtn[aria-current="true"] .n{color:#62e0a8}
+.stepbtn[aria-current="true"] .t{color:#fff}
+.play{border:1.5px solid var(--line2);background:#fff;border-radius:12px;padding:0 16px;cursor:pointer;font-family:var(--mono);font-size:13.5px;white-space:nowrap;flex:none}
+.play:hover{border-color:var(--avg);color:var(--avg)}
+
+.plot-frame{background:#fbfcfe;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:12px}
+.plot-frame .ph{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;padding:9px 12px 0}
+svg.plot{display:block;width:100%;height:auto}
+text{font-family:var(--mono)}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:11.5px;color:var(--muted);padding:2px 12px 10px}
+.legend i{display:inline-block;width:15px;height:0;border-top-width:3px;border-top-style:solid;margin-right:5px;vertical-align:middle}
+
+.caption-block{display:flex;gap:14px;align-items:flex-start;margin-top:4px;padding-top:14px;border-top:1px solid var(--line)}
+.caption-block .big{font-family:var(--serif);font-weight:700;font-size:32px;color:var(--avg);line-height:1;min-width:24px}
+.caption-block p{margin:0;font-size:15.5px}
+.caption-block .tag{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;display:block;margin-bottom:3px}
+
+.controls{padding:16px 18px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:18px 28px;align-items:flex-end}
+.ctl-block{display:flex;flex-direction:column;gap:8px}
+.ctl-label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.slider-row{display:flex;align-items:center;gap:12px}
+.slider-row input[type=range]{width:180px;accent-color:var(--avg)}
+.val{font-variant-numeric:tabular-nums;font-weight:600;font-size:14px;min-width:64px}
+
+.system{padding:16px 18px;margin-bottom:16px}
+.system h3{font-family:var(--serif);font-size:18px;margin:0 0 4px}
+.system .note{font-size:12.5px;color:var(--muted);margin:0 0 14px}
+.vtable{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.vtable th,.vtable td{text-align:right;padding:8px 10px;font-size:13.5px;border-bottom:1px solid var(--line)}
+.vtable th:first-child,.vtable td:first-child{text-align:left;color:var(--muted);font-size:12.5px}
+.vtable thead th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;border-bottom:1.5px solid var(--line2)}
+.vtable .pcol{color:var(--pres)} .vtable .qcol{color:var(--flow)}
+.vtable tr.avg td{font-weight:600;background:var(--avg-soft)}
+.vtable tr.avg td:not(:first-child){color:#0a7a4d}
+.vtable .unit{color:var(--muted);font-size:10.5px}
+
+.conclusion{padding:18px 20px;margin-bottom:8px;border-left:4px solid var(--avg);background:linear-gradient(180deg,#f4faf7,#ffffff)}
+.conclusion .tag{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--avg);font-weight:600;margin-bottom:8px}
+.conclusion p{margin:0;font-family:var(--serif);font-size:16.5px;line-height:1.42}
+.verdict{margin-top:12px;font-size:13.5px;font-weight:500;display:inline-flex;gap:8px;padding:7px 12px;border-radius:8px;background:var(--avg-soft);color:#0a7a4d}
+footer{margin-top:14px;font-size:12px;color:var(--muted);text-align:center}
+
+@media (max-width:680px){
+  .stepbtn{flex:1 1 45%;min-width:0}
+  .slider-row input[type=range]{width:140px}
+  .vtable th,.vtable td{padding:7px 6px;font-size:12.5px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Métodos numéricos · RK2 sobre un sistema acoplado</p>
+    <h1>RK2 en un sistema de 2 ecuaciones:<br>presión y flujo a la vez</h1>
+    <p class="sub">El modelo del paper acopla 10 ecuaciones. Aquí lo reducimos a su núcleo: <b>presión arterial P</b> y <b>flujo Q</b>, acopladas por la inertancia y la compliancia (igual que las ecuaciones 15–16). La idea importante es que ahora cada pendiente <b>k es un par</b> —una para P, otra para Q— y RK2 promedia ambas componentes a la vez. Mueve la presión inicial y compara con la presión real de la persona, dibujada transparente de fondo.</p>
+  </header>
+
+  <div class="panel eqs">
+    <span class="lab">El sistema reducido de 2 ecuaciones</span>
+    <div class="eq p">dP/dt = ( I(t) − Q ) / C &nbsp; <small>la presión sube con la eyección del corazón I(t) y baja con el flujo Q de salida</small></div>
+    <div class="eq q">dQ/dt = ( P − P_v − Q·R ) / L &nbsp; <small>el flujo cambia según la diferencia de presión, frenado por R e inercia L</small></div>
+  </div>
+
+  <div class="panel stage">
+    <div class="stepnav" id="stepnav">
+      <button class="stepbtn" data-step="1"><span class="n">1</span><span class="t">Pendiente inicial (par P, Q)</span></button>
+      <button class="stepbtn" data-step="2"><span class="n">2</span><span class="t">Punto del paso y su pendiente</span></button>
+      <button class="stepbtn" data-step="3"><span class="n">3</span><span class="t">Promedio de pendientes</span></button>
+      <button class="stepbtn" data-step="4"><span class="n">4</span><span class="t">Recalcular el nuevo estado</span></button>
+      <button class="play" id="play">▶ Reproducir</button>
+    </div>
+
+    <div class="plot-frame">
+      <div class="ph">Presión arterial P(t) — trayectoria completa</div>
+      <svg id="ovP" class="plot" viewBox="0 0 740 210" role="img" aria-label="Presión arterial en el tiempo"></svg>
+      <div class="legend">
+        <span><i style="border-color:#2b3a55;opacity:.4"></i>presión real (referencia)</span>
+        <span><i style="border-color:#0d9b63"></i>RK2 (paso h)</span>
+        <span><i style="border-color:#0d9b63;border-top-style:dashed"></i>paso que estás inspeccionando</span>
+      </div>
+    </div>
+
+    <div class="plot-frame">
+      <div class="ph">Flujo Q(t) — la otra variable del sistema, calculada en paralelo a P</div>
+      <svg id="ovQ" class="plot" viewBox="0 0 740 165" role="img" aria-label="Flujo en el tiempo"></svg>
+      <div class="legend">
+        <span><i style="border-color:#2b3a55;opacity:.4"></i>flujo real (referencia)</span>
+        <span><i style="border-color:#2563c9"></i>RK2 (paso h)</span>
+        <span><i style="border-color:#0d9b63;border-top-style:dashed"></i>mismo paso inspeccionado</span>
+      </div>
+    </div>
+
+    <div class="plot-frame">
+      <div class="ph">Acercamiento al paso seleccionado — construcción RK2 sobre P</div>
+      <svg id="zoom" class="plot" viewBox="0 0 740 320" role="img" aria-label="Construcción del paso RK2"></svg>
+    </div>
+
+    <div class="plot-frame">
+      <div class="ph">Acercamiento al paso seleccionado — construcción RK2 sobre Q (en paralelo a P)</div>
+      <svg id="zoomQ" class="plot" viewBox="0 0 740 320" role="img" aria-label="Construcción del paso RK2 sobre Q"></svg>
+    </div>
+
+    <div class="caption-block">
+      <span class="big" id="capnum">1</span>
+      <p><span class="tag" id="captag">Paso 1</span><span id="captext"></span></p>
+    </div>
+  </div>
+
+  <div class="panel controls">
+    <div class="ctl-block">
+      <span class="ctl-label">Presión inicial P₀</span>
+      <div class="slider-row"><input type="range" id="p0" min="40" max="140" step="1" value="80"><span class="val" id="p0v"></span></div>
+    </div>
+    <div class="ctl-block">
+      <span class="ctl-label">Tamaño del paso h</span>
+      <div class="slider-row"><input type="range" id="h" min="0.02" max="0.16" step="0.005" value="0.08"><span class="val" id="hv"></span></div>
+    </div>
+    <div class="ctl-block">
+      <span class="ctl-label">Paso a inspeccionar</span>
+      <div class="slider-row"><input type="range" id="si" min="0" max="10" step="1" value="0"><span class="val" id="siv"></span></div>
+    </div>
+  </div>
+
+  <div class="panel system">
+    <h3>El paso, componente a componente</h3>
+    <p class="note">Como es un sistema, cada k tiene una parte para P y otra para Q. RK2 promedia ambas a la vez y avanza el estado completo (P, Q).</p>
+    <table class="vtable">
+      <thead><tr><th>cantidad</th><th class="pcol">componente P <span class="unit">mmHg/s</span></th><th class="qcol">componente Q <span class="unit">(ml/s)/s</span></th></tr></thead>
+      <tbody>
+        <tr><td>k₁ · pendiente inicial</td><td class="pcol" id="t_k1p">—</td><td class="qcol" id="t_k1q">—</td></tr>
+        <tr><td>k₂ · pendiente en el punto del paso</td><td class="pcol" id="t_k2p">—</td><td class="qcol" id="t_k2q">—</td></tr>
+        <tr class="avg"><td>promedio (k₁+k₂)/2</td><td id="t_ap">—</td><td id="t_aq">—</td></tr>
+      </tbody>
+    </table>
+    <table class="vtable" style="margin-top:14px">
+      <thead><tr><th>resultado del paso</th><th class="pcol">P <span class="unit">mmHg</span></th><th class="qcol">Q <span class="unit">ml/s</span></th></tr></thead>
+      <tbody>
+        <tr><td>estado inicial (Pₙ, Qₙ)</td><td class="pcol" id="t_p0">—</td><td class="qcol" id="t_q0">—</td></tr>
+        <tr><td>primer h · Euler (solo k₁)</td><td class="pcol" id="t_eu">—</td><td class="qcol" id="t_euq">—</td></tr>
+        <tr class="avg"><td>segundo h · RK2 (promedio)</td><td id="t_rk">—</td><td id="t_rkq">—</td></tr>
+        <tr><td>presión real en ese instante</td><td class="pcol" id="t_real">—</td><td class="qcol">—</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel conclusion">
+    <div class="tag">Conclusión</div>
+    <p>RK2 hace exactamente lo mismo que con una sola ecuación, pero sobre el vector (P, Q): promedia dos pendientes por componente y avanza las dos variables juntas. Con solo dos etapas —en vez de las cuatro de RK4— la mecánica se ve clara, y aun así el segundo h sigue más cerca de la presión real que el primero.</p>
+    <div class="verdict" id="verdict">comprobando…</div>
+  </div>
+
+  <footer>Modelo simplificado con fines didácticos (parámetros lumped, no de un paciente específico). El paper de Ortiz-Rangel et al. extiende esta misma idea a 10 ecuaciones y usa RK4.</footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var PAR={C:2.6,R:0.75,L:0.8,Pv:4,Imax:440,T:0.8,Ts:0.3};
+  var BEATS=3, TEND=BEATS*PAR.T, REFDT=0.002, Q0=0;
+  function inflow(t){var tt=t%PAR.T; if(tt>=PAR.Ts) return 0; var s=Math.sin(Math.PI*tt/PAR.Ts); return PAR.Imax*s*s;}
+  function fsys(t,P,Q){return [ (inflow(t)-Q)/PAR.C, (P-PAR.Pv-Q*PAR.R)/PAR.L ];}
+
+  function reference(P0){
+    var arr=[{t:0,P:P0,Q:Q0}], t=0,P=P0,Q=Q0, n=Math.round(TEND/REFDT);
+    for(var i=0;i<n;i++){
+      var a=fsys(t,P,Q), b=fsys(t+REFDT/2,P+REFDT/2*a[0],Q+REFDT/2*a[1]),
+          c=fsys(t+REFDT/2,P+REFDT/2*b[0],Q+REFDT/2*b[1]), d=fsys(t+REFDT,P+REFDT*c[0],Q+REFDT*c[1]);
+      P+=REFDT/6*(a[0]+2*b[0]+2*c[0]+d[0]); Q+=REFDT/6*(a[1]+2*b[1]+2*c[1]+d[1]); t+=REFDT;
+      arr.push({t:t,P:P,Q:Q});
+    }
+    return arr;
+  }
+  function refAt(ref,t){ // linear interpolation
+    if(t<=0) return ref[0]; if(t>=ref[ref.length-1].t) return ref[ref.length-1];
+    var i=Math.floor(t/REFDT); if(i>=ref.length-1) i=ref.length-2;
+    var a=ref[i], b=ref[i+1], u=(t-a.t)/(b.t-a.t);
+    return {t:t,P:a.P+u*(b.P-a.P),Q:a.Q+u*(b.Q-a.Q)};
+  }
+  function rk2nodes(P0,h){
+    var nodes=[{t:0,P:P0,Q:Q0}], t=0,P=P0,Q=Q0, n=Math.round(TEND/h);
+    for(var i=0;i<n;i++){
+      var k1=fsys(t,P,Q), Pp=P+h*k1[0], Qp=Q+h*k1[1];
+      var k2=fsys(t+h,Pp,Qp), aP=(k1[0]+k2[0])/2, aQ=(k1[1]+k2[1])/2;
+      P+=h*aP; Q+=h*aQ; t+=h; nodes.push({t:t,P:P,Q:Q});
+    }
+    return nodes;
+  }
+
+  var st={P0:80,h:0.08,si:0,step:1};
+  var $=function(id){return document.getElementById(id);};
+
+  Array.prototype.forEach.call($("stepnav").querySelectorAll(".stepbtn"),function(b){
+    b.addEventListener("click",function(){stopPlay(); st.step=parseInt(b.dataset.step,10); render();});
+  });
+  var playT=null;
+  function stopPlay(){if(playT){clearInterval(playT);playT=null;$("play").textContent="▶ Reproducir";}}
+  $("play").addEventListener("click",function(){
+    if(playT){stopPlay();return;}
+    st.step=1; render(); $("play").textContent="⏸ Pausar";
+    playT=setInterval(function(){ if(st.step>=4){stopPlay();return;} st.step++; render(); },1100);
+  });
+  $("p0").addEventListener("input",function(e){st.P0=parseFloat(e.target.value); render();});
+  $("h").addEventListener("input",function(e){st.h=parseFloat(e.target.value); render();});
+  $("si").addEventListener("input",function(e){st.si=parseInt(e.target.value,10); render();});
+
+  var CAP={
+    1:"Se calcula la pendiente inicial del sistema en el punto actual: un par de valores, una pendiente para P y otra para Q.",
+    2:"Se avanza un paso h con esa pendiente hasta un estado tentativo, y ahí se mide la segunda pendiente (también un par).",
+    3:"Se promedian las dos pendientes componente a componente, para obtener una pendiente intermedia para cada variable.",
+    4:"Se mueve esa pendiente promedio al punto inicial y se recalcula el nuevo estado (P, Q)."
+  };
+
+  function nf(v,d){ if(!isFinite(v)) return "—"; d=(d==null?2:d); return (v>=0?" ":"")+v.toFixed(d); }
+
+  // generic plot helpers
+  function mk(svgEl,VB,xmin,xmax,ymin,ymax,ML,MR,MT,MB){
+    var W=VB[0],H=VB[1], PW=W-ML-MR, PH=H-MT-MB;
+    return {
+      W:W,H:H,ML:ML,MR:MR,MT:MT,MB:MB,PW:PW,PH:PH,
+      X:function(x){return ML+(x-xmin)/(xmax-xmin)*PW;},
+      Y:function(y){return MT+(ymax-y)/(ymax-ymin)*PH;},
+      xmin:xmin,xmax:xmax,ymin:ymin,ymax:ymax
+    };
+  }
+  function pathPts(g,pts){var d='';for(var i=0;i<pts.length;i++){d+=(i?'L':'M')+g.X(pts[i][0]).toFixed(1)+' '+g.Y(pts[i][1]).toFixed(1);}return d;}
+
+  function render(){
+    var P0=st.P0, h=st.h;
+    var ref=reference(P0);
+    var nodes=rk2nodes(P0,h);
+    var Nsteps=nodes.length-1;
+    // step slider bounds
+    var sis=$("si"); sis.max=Nsteps-1; if(st.si>Nsteps-1) st.si=Nsteps-1; if(st.si<0) st.si=0; sis.value=st.si;
+    var k=st.si;
+    var n0=nodes[k];
+    var tk=n0.t, Pk=n0.P, Qk=n0.Q, tk1=tk+h;
+    var k1=fsys(tk,Pk,Qk);
+    var Ppred=Pk+h*k1[0], Qpred=Qk+h*k1[1];
+    var k2=fsys(tk1,Ppred,Qpred);
+    var aP=(k1[0]+k2[0])/2, aQ=(k1[1]+k2[1])/2;
+    var Pnew=Pk+h*aP, Qnew=Qk+h*aQ;
+    var rl=refAt(ref,tk1), Preal=rl.P;
+
+    /* ---------- OVERVIEW P(t) ---------- */
+    (function(){
+      var pmin=1e9,pmax=-1e9; for(var i=0;i<ref.length;i++){if(ref[i].P<pmin)pmin=ref[i].P; if(ref[i].P>pmax)pmax=ref[i].P;}
+      for(var j=0;j<nodes.length;j++){if(nodes[j].P<pmin)pmin=nodes[j].P; if(nodes[j].P>pmax)pmax=nodes[j].P;}
+      var r=pmax-pmin; pmin-=0.12*r; pmax+=0.12*r;
+      var g=mk(null,[740,210],0,TEND,pmin,pmax,46,16,14,30);
+      var s='<defs><clipPath id="cpO"><rect x="'+g.ML+'" y="'+g.MT+'" width="'+g.PW+'" height="'+g.PH+'"/></clipPath></defs>';
+      // beat guides
+      for(var bt=PAR.T; bt<TEND-1e-6; bt+=PAR.T){ s+='<line x1="'+g.X(bt)+'" y1="'+g.MT+'" x2="'+g.X(bt)+'" y2="'+(g.MT+g.PH)+'" stroke="#eef1f6" stroke-width="1"/>'; }
+      // selected step band
+      s+='<rect x="'+g.X(tk)+'" y="'+g.MT+'" width="'+(g.X(tk1)-g.X(tk))+'" height="'+g.PH+'" fill="#0d9b63" opacity="0.10"/>';
+      s+='<line x1="'+g.X(tk)+'" y1="'+g.MT+'" x2="'+g.X(tk)+'" y2="'+(g.MT+g.PH)+'" stroke="#0d9b63" stroke-width="1" stroke-dasharray="3 3"/>';
+      s+='<line x1="'+g.X(tk1)+'" y1="'+g.MT+'" x2="'+g.X(tk1)+'" y2="'+(g.MT+g.PH)+'" stroke="#0d9b63" stroke-width="1" stroke-dasharray="3 3"/>';
+      // axes labels
+      s+='<text x="'+g.ML+'" y="'+(g.MT+g.PH+20)+'" font-size="11" fill="#6a7484">0 s</text>';
+      s+='<text x="'+(g.ML+g.PW)+'" y="'+(g.MT+g.PH+20)+'" font-size="11" fill="#6a7484" text-anchor="end">'+TEND.toFixed(1)+' s</text>';
+      s+='<text x="12" y="'+(g.MT+8)+'" font-size="10.5" fill="#6a7484">'+pmax.toFixed(0)+'</text>';
+      s+='<text x="12" y="'+(g.MT+g.PH)+'" font-size="10.5" fill="#6a7484">'+pmin.toFixed(0)+'</text>';
+      s+='<text x="12" y="'+(g.MT+g.PH/2)+'" font-size="10" fill="#6a7484" transform="rotate(-90 12 '+(g.MT+g.PH/2)+')" text-anchor="middle">mmHg</text>';
+      // real curve
+      var rp=[]; for(var a=0;a<ref.length;a+=2){rp.push([ref[a].t,ref[a].P]);}
+      s+='<path d="'+pathPts(g,rp)+'" fill="none" stroke="#2b3a55" stroke-width="2.6" opacity="0.38" clip-path="url(#cpO)"/>';
+      // rk2 line + dots
+      var np=[]; for(var m=0;m<nodes.length;m++){np.push([nodes[m].t,nodes[m].P]);}
+      s+='<path d="'+pathPts(g,np)+'" fill="none" stroke="#0d9b63" stroke-width="2" clip-path="url(#cpO)"/>';
+      for(var d2=0;d2<nodes.length;d2++){ s+='<circle cx="'+g.X(nodes[d2].t).toFixed(1)+'" cy="'+g.Y(nodes[d2].P).toFixed(1)+'" r="'+(d2===k?4:2.4)+'" fill="#0d9b63"/>'; }
+      $("ovP").innerHTML=s;
+    })();
+
+    /* ---------- OVERVIEW Q(t) ---------- */
+    (function(){
+      var qmin=1e9,qmax=-1e9;
+      for(var i=0;i<ref.length;i++){if(ref[i].Q<qmin)qmin=ref[i].Q; if(ref[i].Q>qmax)qmax=ref[i].Q;}
+      for(var j=0;j<nodes.length;j++){if(nodes[j].Q<qmin)qmin=nodes[j].Q; if(nodes[j].Q>qmax)qmax=nodes[j].Q;}
+      var r=qmax-qmin; if(r<1e-6)r=1; qmin-=0.14*r; qmax+=0.14*r;
+      var g=mk(null,[740,165],0,TEND,qmin,qmax,46,16,12,28);
+      var s='<defs><clipPath id="cpQ"><rect x="'+g.ML+'" y="'+g.MT+'" width="'+g.PW+'" height="'+g.PH+'"/></clipPath></defs>';
+      for(var bt=PAR.T; bt<TEND-1e-6; bt+=PAR.T){ s+='<line x1="'+g.X(bt)+'" y1="'+g.MT+'" x2="'+g.X(bt)+'" y2="'+(g.MT+g.PH)+'" stroke="#eef1f6" stroke-width="1"/>'; }
+      s+='<rect x="'+g.X(tk)+'" y="'+g.MT+'" width="'+(g.X(tk1)-g.X(tk))+'" height="'+g.PH+'" fill="#0d9b63" opacity="0.10"/>';
+      s+='<line x1="'+g.X(tk)+'" y1="'+g.MT+'" x2="'+g.X(tk)+'" y2="'+(g.MT+g.PH)+'" stroke="#0d9b63" stroke-width="1" stroke-dasharray="3 3"/>';
+      s+='<line x1="'+g.X(tk1)+'" y1="'+g.MT+'" x2="'+g.X(tk1)+'" y2="'+(g.MT+g.PH)+'" stroke="#0d9b63" stroke-width="1" stroke-dasharray="3 3"/>';
+      s+='<text x="'+g.ML+'" y="'+(g.MT+g.PH+18)+'" font-size="11" fill="#6a7484">0 s</text>';
+      s+='<text x="'+(g.ML+g.PW)+'" y="'+(g.MT+g.PH+18)+'" font-size="11" fill="#6a7484" text-anchor="end">'+TEND.toFixed(1)+' s</text>';
+      s+='<text x="12" y="'+(g.MT+8)+'" font-size="10.5" fill="#6a7484">'+qmax.toFixed(0)+'</text>';
+      s+='<text x="12" y="'+(g.MT+g.PH)+'" font-size="10.5" fill="#6a7484">'+qmin.toFixed(0)+'</text>';
+      s+='<text x="12" y="'+(g.MT+g.PH/2)+'" font-size="10" fill="#6a7484" transform="rotate(-90 12 '+(g.MT+g.PH/2)+')" text-anchor="middle">ml/s</text>';
+      var rp=[]; for(var a=0;a<ref.length;a+=2){rp.push([ref[a].t,ref[a].Q]);}
+      s+='<path d="'+pathPts(g,rp)+'" fill="none" stroke="#2b3a55" stroke-width="2.6" opacity="0.38" clip-path="url(#cpQ)"/>';
+      var np=[]; for(var m=0;m<nodes.length;m++){np.push([nodes[m].t,nodes[m].Q]);}
+      s+='<path d="'+pathPts(g,np)+'" fill="none" stroke="#2563c9" stroke-width="2" clip-path="url(#cpQ)"/>';
+      for(var d2=0;d2<nodes.length;d2++){ s+='<circle cx="'+g.X(nodes[d2].t).toFixed(1)+'" cy="'+g.Y(nodes[d2].Q).toFixed(1)+'" r="'+(d2===k?4:2.4)+'" fill="#2563c9"/>'; }
+      $("ovQ").innerHTML=s;
+    })();
+
+    /* ---------- ZOOM: 4-step construction on P ---------- */
+    (function(){
+      var xa=tk-0.4*h, xb=tk1+0.65*h;
+      var k2endP=Pk+h*k2[0];
+      var ys=[Pk,Ppred,Pnew,Preal,k2endP];
+      for(var x=xa;x<=xb;x+=h/24){ ys.push(refAt(ref,x).P); }
+      var ymin=Math.min.apply(null,ys), ymax=Math.max.apply(null,ys), r=ymax-ymin; if(r<1e-6)r=1; ymin-=0.18*r; ymax+=0.18*r;
+      var g=mk(null,[740,320],xa,xb,ymin,ymax,52,20,18,40);
+      var s='<defs><clipPath id="cpZ"><rect x="'+g.ML+'" y="'+g.MT+'" width="'+g.PW+'" height="'+g.PH+'"/></clipPath></defs>';
+      // guides at tk, tk1
+      s+='<line x1="'+g.X(tk)+'" y1="'+g.MT+'" x2="'+g.X(tk)+'" y2="'+(g.MT+g.PH)+'" stroke="#d3dae5" stroke-width="1" stroke-dasharray="3 4"/>';
+      s+='<line x1="'+g.X(tk1)+'" y1="'+g.MT+'" x2="'+g.X(tk1)+'" y2="'+(g.MT+g.PH)+'" stroke="#d3dae5" stroke-width="1" stroke-dasharray="3 4"/>';
+      s+='<text x="'+g.X(tk)+'" y="'+(g.MT+g.PH+22)+'" font-size="12" fill="#6a7484" text-anchor="middle">tₙ</text>';
+      s+='<text x="'+g.X(tk1)+'" y="'+(g.MT+g.PH+22)+'" font-size="12" fill="#6a7484" text-anchor="middle">tₙ+h</text>';
+      s+='<text x="14" y="'+(g.MT+g.PH/2)+'" font-size="10" fill="#6a7484" transform="rotate(-90 14 '+(g.MT+g.PH/2)+')" text-anchor="middle">P (mmHg)</text>';
+      // real curve in window
+      var rp=[]; for(var x2=xa;x2<=xb;x2+=h/40){rp.push([x2,refAt(ref,x2).P]);}
+      var op=(st.step===4)?0.85:0.32;
+      s+='<path d="'+pathPts(g,rp)+'" fill="none" stroke="#2b3a55" stroke-width="2.4" opacity="'+op+'" clip-path="url(#cpZ)"/>';
+      function ray(xa_,ya_,xb_,yb_,c,w,dash,o){var d=dash?' stroke-dasharray="'+dash+'"':'';var oo=o?' opacity="'+o+'"':'';return '<line x1="'+g.X(xa_).toFixed(1)+'" y1="'+g.Y(ya_).toFixed(1)+'" x2="'+g.X(xb_).toFixed(1)+'" y2="'+g.Y(yb_).toFixed(1)+'" stroke="'+c+'" stroke-width="'+w+'"'+d+oo+' clip-path="url(#cpZ)"/>';}
+      function dot(x,y,c,rad,strk){var ss=strk?' stroke="'+strk+'" stroke-width="1.5"':'';return '<circle cx="'+g.X(x).toFixed(1)+'" cy="'+g.Y(y).toFixed(1)+'" r="'+(rad||4.5)+'" fill="'+c+'"'+ss+'/>';}
+      function lab(x,y,t,c,anc,dy){return '<text x="'+g.X(x).toFixed(1)+'" y="'+(g.Y(y)+(dy||0)).toFixed(1)+'" font-size="13" font-weight="500" fill="'+c+'"'+(anc?' text-anchor="'+anc+'"':'')+'>'+t+'</text>';}
+
+      if(st.step===1){
+        s+=ray(xa,Pk+k1[0]*(xa-tk), xb, Pk+k1[0]*(xb-tk),"#2563c9",2.4);
+        s+=dot(tk,Pk,"#2b3a55",5);
+        s+=lab(tk,Pk,"(tₙ, Pₙ)","#2b3a55","start",18);
+        s+=lab(tk+0.5*h,Pk+k1[0]*0.5*h,"k₁ (componente P)","#2563c9","middle",-8);
+      } else if(st.step===2){
+        s+=ray(tk,Pk,tk1,Ppred,"#2563c9",2.2,"6 4");
+        s+=dot(tk,Pk,"#2b3a55",5);
+        var hw=0.45*h; s+=ray(tk1-hw,Ppred-k2[0]*hw, tk1+0.35*h, Ppred+k2[0]*0.35*h,"#cf4434",2.6);
+        s+=dot(tk1,Ppred,"#cf4434",5);
+        s+=lab(tk1,Ppred,"punto del paso","#cf4434","end",-12);
+        s+=lab(tk1,Ppred,"k₂","#cf4434","start",18);
+      } else if(st.step===3){
+        s+=ray(tk,Pk,tk1,Ppred,"#2563c9",2.2);
+        s+=ray(tk,Pk,tk1,k2endP,"#cf4434",2.2);
+        s+=ray(tk,Pk,tk1,Pnew,"#0d9b63",3.4);
+        s+=dot(tk,Pk,"#2b3a55",5);
+        s+=lab(tk1,Ppred,"k₁","#2563c9","start",-3);
+        s+=lab(tk1,k2endP,"k₂","#cf4434","start",4);
+        s+=lab(tk1,Pnew,"promedio","#0d9b63","start",4);
+        s+=lab(tk+0.45*h,Pk+aP*0.45*h,"queda en medio","#0d9b63","middle",-9);
+      } else {
+        s+=ray(tk,Pk,tk1,Ppred,"#cf4434",1.6,"5 4",0.55);
+        s+=ray(tk,Pk,tk1,Pnew,"#0d9b63",3.4);
+        s+=dot(tk,Pk,"#2b3a55",5);
+        s+=dot(tk1,Ppred,"#cf4434",4,"#fff");
+        s+=dot(tk1,Pnew,"#0d9b63",5);
+        s+=dot(tk1,Preal,"#2b3a55",5,"#fff");
+        s+=lab(tk1,Ppred,"1.ᵉʳ h (Euler)","#cf4434","start",4);
+        s+=lab(tk1,Pnew,"2.° h (RK2)","#0d9b63","start",-9);
+        s+=lab(tk1,Preal,"real","#2b3a55","end",-9);
+      }
+      $("zoom").innerHTML=s;
+    })();
+
+    /* ---------- ZOOM Q: 4-step construction on Q ---------- */
+    (function(){
+      var xa=tk-0.4*h, xb=tk1+0.65*h;
+      var k2endQ=Qk+h*k2[1], Qreal=rl.Q;
+      var ys=[Qk,Qpred,Qnew,Qreal,k2endQ];
+      for(var x=xa;x<=xb;x+=h/24){ ys.push(refAt(ref,x).Q); }
+      var ymin=Math.min.apply(null,ys), ymax=Math.max.apply(null,ys), r=ymax-ymin; if(r<1e-6)r=1; ymin-=0.18*r; ymax+=0.18*r;
+      var g=mk(null,[740,320],xa,xb,ymin,ymax,52,20,18,40);
+      var s='<defs><clipPath id="cpZQ"><rect x="'+g.ML+'" y="'+g.MT+'" width="'+g.PW+'" height="'+g.PH+'"/></clipPath></defs>';
+      s+='<line x1="'+g.X(tk)+'" y1="'+g.MT+'" x2="'+g.X(tk)+'" y2="'+(g.MT+g.PH)+'" stroke="#d3dae5" stroke-width="1" stroke-dasharray="3 4"/>';
+      s+='<line x1="'+g.X(tk1)+'" y1="'+g.MT+'" x2="'+g.X(tk1)+'" y2="'+(g.MT+g.PH)+'" stroke="#d3dae5" stroke-width="1" stroke-dasharray="3 4"/>';
+      s+='<text x="'+g.X(tk)+'" y="'+(g.MT+g.PH+22)+'" font-size="12" fill="#6a7484" text-anchor="middle">tₙ</text>';
+      s+='<text x="'+g.X(tk1)+'" y="'+(g.MT+g.PH+22)+'" font-size="12" fill="#6a7484" text-anchor="middle">tₙ+h</text>';
+      s+='<text x="14" y="'+(g.MT+g.PH/2)+'" font-size="10" fill="#6a7484" transform="rotate(-90 14 '+(g.MT+g.PH/2)+')" text-anchor="middle">Q (ml/s)</text>';
+      var rp=[]; for(var x2=xa;x2<=xb;x2+=h/40){rp.push([x2,refAt(ref,x2).Q]);}
+      var op=(st.step===4)?0.85:0.32;
+      s+='<path d="'+pathPts(g,rp)+'" fill="none" stroke="#2b3a55" stroke-width="2.4" opacity="'+op+'" clip-path="url(#cpZQ)"/>';
+      function ray(xa_,ya_,xb_,yb_,c,w,dash,o){var d=dash?' stroke-dasharray="'+dash+'"':'';var oo=o?' opacity="'+o+'"':'';return '<line x1="'+g.X(xa_).toFixed(1)+'" y1="'+g.Y(ya_).toFixed(1)+'" x2="'+g.X(xb_).toFixed(1)+'" y2="'+g.Y(yb_).toFixed(1)+'" stroke="'+c+'" stroke-width="'+w+'"'+d+oo+' clip-path="url(#cpZQ)"/>';}
+      function dot(x,y,c,rad,strk){var ss=strk?' stroke="'+strk+'" stroke-width="1.5"':'';return '<circle cx="'+g.X(x).toFixed(1)+'" cy="'+g.Y(y).toFixed(1)+'" r="'+(rad||4.5)+'" fill="'+c+'"'+ss+'/>';}
+      function lab(x,y,t,c,anc,dy){return '<text x="'+g.X(x).toFixed(1)+'" y="'+(g.Y(y)+(dy||0)).toFixed(1)+'" font-size="13" font-weight="500" fill="'+c+'"'+(anc?' text-anchor="'+anc+'"':'')+'>'+t+'</text>';}
+      if(st.step===1){
+        s+=ray(xa,Qk+k1[1]*(xa-tk), xb, Qk+k1[1]*(xb-tk),"#2563c9",2.4);
+        s+=dot(tk,Qk,"#2b3a55",5);
+        s+=lab(tk,Qk,"(tₙ, Qₙ)","#2b3a55","start",18);
+        s+=lab(tk+0.5*h,Qk+k1[1]*0.5*h,"k₁ (componente Q)","#2563c9","middle",-8);
+      } else if(st.step===2){
+        s+=ray(tk,Qk,tk1,Qpred,"#2563c9",2.2,"6 4");
+        s+=dot(tk,Qk,"#2b3a55",5);
+        var hw=0.45*h; s+=ray(tk1-hw,Qpred-k2[1]*hw, tk1+0.35*h, Qpred+k2[1]*0.35*h,"#cf4434",2.6);
+        s+=dot(tk1,Qpred,"#cf4434",5);
+        s+=lab(tk1,Qpred,"punto del paso","#cf4434","end",-12);
+        s+=lab(tk1,Qpred,"k₂","#cf4434","start",18);
+      } else if(st.step===3){
+        s+=ray(tk,Qk,tk1,Qpred,"#2563c9",2.2);
+        s+=ray(tk,Qk,tk1,k2endQ,"#cf4434",2.2);
+        s+=ray(tk,Qk,tk1,Qnew,"#0d9b63",3.4);
+        s+=dot(tk,Qk,"#2b3a55",5);
+        s+=lab(tk1,Qpred,"k₁","#2563c9","start",-3);
+        s+=lab(tk1,k2endQ,"k₂","#cf4434","start",4);
+        s+=lab(tk1,Qnew,"promedio","#0d9b63","start",4);
+        s+=lab(tk+0.45*h,Qk+aQ*0.45*h,"queda en medio","#0d9b63","middle",-9);
+      } else {
+        s+=ray(tk,Qk,tk1,Qpred,"#cf4434",1.6,"5 4",0.55);
+        s+=ray(tk,Qk,tk1,Qnew,"#0d9b63",3.4);
+        s+=dot(tk,Qk,"#2b3a55",5);
+        s+=dot(tk1,Qpred,"#cf4434",4,"#fff");
+        s+=dot(tk1,Qnew,"#0d9b63",5);
+        s+=dot(tk1,Qreal,"#2b3a55",5,"#fff");
+        s+=lab(tk1,Qpred,"1.ᵉʳ h (Euler)","#cf4434","start",4);
+        s+=lab(tk1,Qnew,"2.° h (RK2)","#0d9b63","start",-9);
+        s+=lab(tk1,Qreal,"real","#2b3a55","end",-9);
+      }
+      $("zoomQ").innerHTML=s;
+    })();
+
+    /* ---------- caption + steps ---------- */
+    $("capnum").textContent=st.step; $("captag").textContent="Paso "+st.step; $("captext").textContent=CAP[st.step];
+    Array.prototype.forEach.call($("stepnav").querySelectorAll(".stepbtn"),function(b){
+      b.setAttribute("aria-current", parseInt(b.dataset.step,10)===st.step?"true":"false");
+    });
+
+    /* ---------- readouts ---------- */
+    $("p0v").textContent=st.P0.toFixed(0)+" mmHg";
+    $("hv").textContent=st.h.toFixed(3)+" s";
+    $("siv").textContent="#"+(k+1)+" / "+Nsteps;
+    $("t_k1p").textContent=nf(k1[0]); $("t_k1q").textContent=nf(k1[1]);
+    $("t_k2p").textContent=nf(k2[0]); $("t_k2q").textContent=nf(k2[1]);
+    $("t_ap").textContent=nf(aP); $("t_aq").textContent=nf(aQ);
+    $("t_p0").textContent=nf(Pk,1); $("t_q0").textContent=nf(Qk,1);
+    $("t_eu").textContent=nf(Ppred,1); $("t_euq").textContent=nf(Qpred,1);
+    $("t_rk").textContent=nf(Pnew,1); $("t_rkq").textContent=nf(Qnew,1);
+    $("t_real").textContent=nf(Preal,1);
+
+    var eE=Math.abs(Ppred-Preal), eR=Math.abs(Pnew-Preal);
+    var v=$("verdict");
+    if(eR<=eE+1e-9){ v.style.background="var(--avg-soft)"; v.style.color="#0a7a4d"; v.textContent="✓ En este paso el RK2 (error "+eR.toFixed(3)+" mmHg) quedó más cerca de la presión real que Euler (error "+eE.toFixed(3)+")."; }
+    else { v.style.background="var(--k2-soft)"; v.style.color="#a73327"; v.textContent="✗ Aquí Euler quedó más cerca — baja h y vuelve a comparar."; }
+  }
+
+  // default: start by inspecting step #13
+  st.si=12;
+  render();
+})();
+</script>
+</body>
+</html>
